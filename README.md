@@ -1,8 +1,9 @@
 # TinyAgent
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/ayushi-agarwall/tinyagent/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code Size](https://img.shields.io/badge/code%20size-~130%20lines-green.svg)](./src/tinyagent/core.py)
+[![Code Size](https://img.shields.io/badge/code%20size-6.4%20KB-green.svg)](./src/tinyagent/core.py)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](./pyproject.toml)
 [![GitHub](https://img.shields.io/github/stars/ayushi-agarwall/tinyagent?style=social)](https://github.com/ayushi-agarwall/tinyagent)
 
@@ -52,6 +53,24 @@ TinyAgent is built on three primitives:
 ```
 
 ## Installation
+
+### Option 1: Install from Source (Recommended for now)
+
+```bash
+git clone https://github.com/ayushi-agarwall/tinyagent.git
+cd tinyagent
+pip install -e .
+```
+
+### Option 2: Copy-Paste (Zero Install)
+
+Just copy [`src/tinyagent/core.py`](./src/tinyagent/core.py) into your project:
+
+```bash
+curl -O https://raw.githubusercontent.com/ayushi-agarwall/tinyagent/main/src/tinyagent/core.py
+```
+
+### Option 3: PyPI (Coming Soon)
 
 ```bash
 pip install tinyagent
