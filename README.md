@@ -5,7 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Size](https://img.shields.io/badge/code%20size-6.4%20KB-green.svg)](./src/tinyagent/core.py)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](./pyproject.toml)
-[![GitHub](https://img.shields.io/github/stars/ayushi-agarwall/tinyagent?style=social)](https://github.com/ayushi-agarwall/tinyagent)
 
 A zero-dependency, async-first agent orchestration framework built on graph theory.
 
@@ -17,11 +16,11 @@ TinyAgent is a minimal, production-ready framework for building AI agents and co
 
 | Framework | Core Lines | Dependencies | Vendor Lock-in |
 |-----------|------------|--------------|----------------|
-| TinyAgent | ~100 | 0 | None |
 | LangGraph | ~15,000+ | 20+ | LangChain ecosystem |
 | CrewAI | ~8,000+ | 30+ | CrewAI platform |
 | Pydantic AI | ~5,000+ | 15+ | Pydantic ecosystem |
 | AutoGen | ~20,000+ | 40+ | Microsoft Azure |
+| TinyAgent | ~100 | 0 | None |
 
 ## Design Philosophy
 
@@ -293,7 +292,6 @@ The trace format `[(t1, "A:OK"), (t2, "B:ERR"), (t3, "C:OK")]` directly maps to 
 - Pub/sub event system
 - Workflow validation (cycle detection)
 - Mermaid diagram visualization
-- OpenTelemetry integration
 
 ## License
 
