@@ -1,43 +1,26 @@
-"""Example: Custom Trace Logging with Metadata
+"""Example: Custom Logging with TracingFlow
 
-Demonstrates how to log custom data to the trace for debugging and analysis.
+Demonstrates how to add custom metadata to traces for debugging.
 """
 
 import asyncio
-from tinyagent import Node, State, Flow
+from tinyagent import Node, State
+from tinyagent.telemetry import TracingFlow
 
 
 async def fetch_user(state: State) -> bool:
-    """Fetch user data and log metadata."""
+    """Fetch user data."""
     user_id = await state.get("user_id", 123)
     user_data = {"id": user_id, "name": "Alice", "role": "admin"}
-    
     await state.set("user", user_data)
-    
-    # Log with custom metadata
-    state.log("fetch_user:custom", {
-        "user_id": user_id,
-        "cache_hit": False,
-        "api_latency_ms": 45
-    })
-    
     return True
 
 
 async def process_user(state: State) -> bool:
-    """Process user and log decision metadata."""
+    """Process user."""
     user = await state.get("user")
-    
     decision = "approved" if user["role"] == "admin" else "pending"
     await state.set("decision", decision)
-    
-    # Log decision metadata
-    state.log("process_user:decision", {
-        "decision": decision,
-        "user_role": user["role"],
-        "confidence": 0.95
-    })
-    
     return True
 
 
@@ -49,15 +32,22 @@ Node("process_user", process_user)
 async def main():
     print("=== Custom Trace Logging Example ===\n")
     
-    state = State(data={"user_id": 456}, trace_id="custom-trace-demo")
+    state = State(data={"user_id": 456})
+    flow = TracingFlow(trace_id="custom-trace-demo")
     
-    flow = Flow()
     await flow.run("fetch_user >> process_user", state)
+    
+    # Add custom metadata to trace
+    flow.log("custom_decision", {
+        "user_id": 456,
+        "decision": await state.get("decision"),
+        "confidence": 0.95
+    })
     
     print(f"Decision: {await state.get('decision')}\n")
     
     print("📊 Full Trace with Metadata:")
-    for timestamp, event, metadata in state.trace:
+    for timestamp, event, metadata in flow.trace:
         print(f"  {timestamp:.3f} - {event}")
         if metadata:
             print(f"    Metadata: {metadata}")

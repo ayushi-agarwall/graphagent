@@ -6,12 +6,10 @@ from typing import Any, Callable, Awaitable
 logger = logging.getLogger(__name__)
 
 class State:
-    """Async-safe transient state with unbounded tracing for GNN training data collection."""
-    def __init__(self, data: dict[str, Any] | None = None, async_safe: bool = False, trace_id: str | None = None):
+    """Async-safe transient state container for agent data."""
+    def __init__(self, data: dict[str, Any] | None = None, async_safe: bool = False):
         self._data = data or {}
         self._lock: asyncio.Lock | None = asyncio.Lock() if async_safe else None
-        self.trace: list[tuple[float, str, dict | None]] = []
-        self.trace_id: str = trace_id or f"{time.time():.0f}-{id(self)}"
 
     async def get(self, key: str, default: Any = None) -> Any:
         if self._lock:
@@ -22,9 +20,6 @@ class State:
         if self._lock:
             async with self._lock: self._data[key] = value
         else: self._data[key] = value
-
-    def log(self, entry: str, metadata: dict[str, Any] | None = None) -> None:
-        self.trace.append((time.time(), entry, metadata))
 
 class Node:
     """Atomic unit of work wrapping an async callable."""
@@ -38,12 +33,13 @@ class Node:
 
     async def execute(self, state: State) -> bool:
         for attempt in range(self._retries + 1):
-            start = time.time()
             try:
                 r = await (asyncio.wait_for(self._fn(state), self._timeout) if self._timeout else self._fn(state))
-                state.log(f"{self.name}:OK:{time.time()-start:.3f}s"); return bool(r)
-            except asyncio.TimeoutError: state.log(f"{self.name}:TIMEOUT:{time.time()-start:.3f}s")
-            except Exception as e: logger.exception(self.name); state.log(f"{self.name}:ERR({type(e).__name__}):{time.time()-start:.3f}s")
+                return bool(r)
+            except asyncio.TimeoutError: 
+                logger.warning(f"{self.name} timed out")
+            except Exception as e: 
+                logger.exception(self.name)
         return False
 
 class Flow:

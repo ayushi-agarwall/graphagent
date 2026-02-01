@@ -50,7 +50,7 @@ Node("combine_results", combine_results)
 async def main():
     print("=== Parallel Execution Demo ===\n")
     
-    state = State(trace_id="parallel-demo")
+    state = State()
     
     # Run two API calls in parallel, then combine
     print("Running: (fetch_user_data & fetch_product_data) >> combine_results\n")
@@ -66,10 +66,6 @@ async def main():
     print(f"  Parallel execution: ~0.3s (both APIs called simultaneously)")
     print(f"  Sequential would be: ~0.6s (one after another)")
     print(f"\nResult: {result}")
-    
-    print(f"\n📊 Trace:")
-    for timestamp, event, metadata in state.trace:
-        print(f"  {event}")
 
 
 if __name__ == "__main__":

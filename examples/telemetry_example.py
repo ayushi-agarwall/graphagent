@@ -1,11 +1,11 @@
 """Example: Telemetry and Trace Export
 
-Demonstrates how to use the telemetry module to persist traces for GNN training.
+Demonstrates how to use TracingFlow for observability and GNN training data collection.
 """
 
 import asyncio
 from tinyagent import Node, State, Flow
-from tinyagent.telemetry import save_trace, TraceLoader
+from tinyagent.telemetry import TracingFlow, save_trace, TraceLoader
 
 
 async def generator(state: State) -> bool:
@@ -19,15 +19,6 @@ async def generator(state: State) -> bool:
 async def reviewer(state: State) -> bool:
     """Review generated content."""
     count = await state.get("count")
-    content = await state.get("content")
-    
-    # Log custom metadata
-    state.log("reviewer:decision", {
-        "count": count,
-        "content_length": len(content),
-        "approved": count >= 2
-    })
-    
     return count >= 2  # Approve when count reaches 2
 
 
@@ -39,39 +30,49 @@ Node("reviewer", reviewer)
 async def main():
     print("=== Telemetry Example ===\n")
     
-    # Simulate multiple workflow runs
-    print("Running 5 workflows with self-correction loops...\n")
+    # Example 1: Normal Flow (no tracing)
+    print("1. Normal Flow (no tracing overhead):")
+    state = State()
+    flow = Flow()
+    await flow.run("generator >> reviewer", state)
+    print(f"   Result: {await state.get('count')}")
+    print(f"   No trace recorded\n")
     
+    # Example 2: TracingFlow (with observability)
+    print("2. TracingFlow (automatic tracing):")
+    state = State()
+    tracing_flow = TracingFlow(trace_id="demo-001")
+    await tracing_flow.run("generator <3> reviewer", state)
+    print(f"   Result: {await state.get('count')}")
+    print(f"   Trace events: {len(tracing_flow.trace)}")
+    print(f"   Trace ID: {tracing_flow.trace_id}\n")
+    
+    # Example 3: Custom trace logging
+    print("3. Custom trace logging:")
+    tracing_flow.log("custom_event", {"key": "value", "score": 0.95})
+    print(f"   Added custom event to trace\n")
+    
+    # Example 4: Persist trace for GNN training
+    print("4. Persisting traces for GNN training:")
     for i in range(5):
-        state = State(trace_id=f"workflow-{i:03d}")
-        flow = Flow()
-        
-        # Self-correction loop
-        result = await flow.run("generator <5> reviewer", state)
-        
-        print(f"Workflow {i}: {'✓ Success' if result else '✗ Failed'}")
-        print(f"  Events: {len(state.trace)}")
-        print(f"  Trace ID: {state.trace_id}")
-        
-        # Export trace to file and clear memory
-        save_trace(state, filepath="example_traces.jsonl")
+        state = State()
+        flow = TracingFlow(trace_id=f"workflow-{i:03d}")
+        await flow.run("generator <5> reviewer", state)
+        save_trace(flow, filepath="example_traces.jsonl")
+        print(f"   Workflow {i}: saved to example_traces.jsonl")
     
     print("\n📊 All traces saved to example_traces.jsonl\n")
     
-    # Load and analyze traces
-    print("=== Analyzing Traces ===\n")
+    # Example 5: Load and analyze traces
+    print("5. Loading traces for analysis:")
     traces = TraceLoader.load_jsonl("example_traces.jsonl")
+    print(f"   Total traces loaded: {len(traces)}")
     
-    print(f"Total traces loaded: {len(traces)}")
-    
-    for trace in traces[:2]:  # Show first 2
-        print(f"\nTrace ID: {trace['trace_id']}")
-        print(f"Events: {len(trace['events'])}")
-        
-        # Convert to graph
+    for trace in traces[:2]:
+        print(f"\n   Trace ID: {trace['trace_id']}")
         nodes, edges = TraceLoader.to_graph(trace)
-        print(f"Graph: {len(nodes)} nodes, {len(edges)} edges")
-        print(f"Execution path: {' -> '.join(nodes)}")
+        print(f"   Graph: {len(nodes)} nodes, {len(edges)} edges")
+        print(f"   Path: {' -> '.join(nodes)}")
     
     print("\n✓ Traces ready for GNN training!")
     print("  Format: JSONL (one trace per line)")

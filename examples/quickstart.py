@@ -54,8 +54,8 @@ error_handler = Node("handle_error", handle_error)
 async def main():
     print("=== TinyAgent Quick Start ===\n")
     
-    # Create state with custom trace_id
-    state = State(trace_id="quickstart-demo")
+    # Create state (pure data container)
+    state = State()
     
     # Define flow using string DSL
     flow_expr = "fetch_data >> (validate_data ? process_data | handle_error)"
@@ -70,14 +70,7 @@ async def main():
     result = await state.get("result")
     print(f"Result: {result}")
     
-    # Show trace with timestamps
-    print(f"\n📊 Execution Trace (ID: {state.trace_id}):")
-    start_time = state.trace[0][0] if state.trace else 0
-    for timestamp, event, metadata in state.trace:
-        elapsed = (timestamp - start_time) * 1000
-        print(f"  +{elapsed:6.1f}ms - {event}")
-        if metadata:
-            print(f"    Metadata: {metadata}")
+    print("\nNote: For tracing/observability, use TracingFlow from tinyagent.telemetry")
 
 
 if __name__ == "__main__":
