@@ -69,8 +69,6 @@ async def main():
     print(f"\n✓ Flow completed: {success}")
     result = await state.get("result")
     print(f"Result: {result}")
-    
-    print("\nNote: For tracing/observability, use TracingFlow from tinyagent.telemetry")
 
 
 if __name__ == "__main__":

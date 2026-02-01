@@ -302,7 +302,6 @@ The native context graph structure (trace as adjacency list) directly maps to GN
 - Workflow visualization (Mermaid diagrams from trace)
 - OpenTelemetry integration
 - Pub/sub event system
-- Global agent registry
 
 ## License
 

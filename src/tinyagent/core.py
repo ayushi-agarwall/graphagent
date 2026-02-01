@@ -1,9 +1,7 @@
 """TinyAgent: Zero-dependency async-first agent orchestration framework."""
 from __future__ import annotations
-import asyncio, logging, re, time
+import asyncio, re, time
 from typing import Any, Callable, Awaitable
-
-logger = logging.getLogger(__name__)
 
 class State:
     """Async-safe transient state container for agent data."""
@@ -32,14 +30,14 @@ class Node:
         Node._registry[name] = self
 
     async def execute(self, state: State) -> bool:
-        for attempt in range(self._retries + 1):
+        for _ in range(self._retries + 1):
             try:
                 r = await (asyncio.wait_for(self._fn(state), self._timeout) if self._timeout else self._fn(state))
                 return bool(r)
-            except asyncio.TimeoutError: 
-                logger.warning(f"{self.name} timed out")
-            except Exception as e: 
-                logger.exception(self.name)
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                continue
         return False
 
 class Flow:
