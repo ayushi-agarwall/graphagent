@@ -1,4 +1,4 @@
-# TinyAgent
+# GraphAgent
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/ayushi-agarwall/tinyagent/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -12,7 +12,7 @@ A zero-dependency, async-first agent orchestration framework built on graph theo
 
 ## Overview
 
-TinyAgent is a minimal, production-ready framework for building AI agents and complex multi-agent orchestrations. The entire core is under 100 lines of Python using only the standard library.
+GraphAgent is a minimal, production-ready framework for building AI agents and complex multi-agent orchestrations. The entire core is under 100 lines of Python using only the standard library.
 
 | Framework | Core Lines | Dependencies | Vendor Lock-in |
 |-----------|------------|--------------|----------------|
@@ -20,7 +20,7 @@ TinyAgent is a minimal, production-ready framework for building AI agents and co
 | CrewAI | ~8,000+ | 30+ | CrewAI platform |
 | Pydantic AI | ~5,000+ | 15+ | Pydantic ecosystem |
 | AutoGen | ~20,000+ | 40+ | Microsoft Azure |
-| TinyAgent | ~100 | 0 | None |
+| GraphAgent | ~100 | 0 | None |
 
 ## Design Philosophy
 
@@ -32,7 +32,7 @@ TinyAgent is a minimal, production-ready framework for building AI agents and co
 
 ## Core Concepts
 
-TinyAgent is built on three primitives:
+GraphAgent is built on three primitives:
 
 | Component | Purpose |
 |-----------|---------|
@@ -109,7 +109,7 @@ asyncio.run(main())
 
 ## Supported Architectures
 
-TinyAgent provides Turing-complete orchestration. The following patterns are natively supported through edge operators:
+GraphAgent provides Turing-complete orchestration. The following patterns are natively supported through edge operators:
 
 ### Multi-Agent Systems
 Parallel execution with fan-out and fan-in. Multiple specialized agents work concurrently on subtasks, with results aggregated by a coordinator.
@@ -252,7 +252,7 @@ Execution:
 
 ## Extensibility
 
-TinyAgent integrates with external libraries without lock-in:
+GraphAgent integrates with external libraries without lock-in:
 
 ```python
 from tinyagent import node, State
@@ -277,7 +277,7 @@ async def api_node(state: State) -> bool:
 
 ### GNN-Powered Self-Optimization
 
-TinyAgent trace logs are architected as timestamped graph data specifically designed to serve as training data for Graph Neural Networks (GNNs/GCNs) and temporal graph models. This enables:
+GraphAgent trace logs are architected as timestamped graph data specifically designed to serve as training data for Graph Neural Networks (GNNs/GCNs) and temporal graph models. This enables:
 
 1. **Execution Pattern Learning**: GNNs learn optimal execution paths from historical traces
 2. **Temporal Modeling**: Timestamps enable State Space Models on temporal graphs
