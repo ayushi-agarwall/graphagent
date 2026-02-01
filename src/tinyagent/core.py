@@ -119,10 +119,17 @@ class Flow:
                 if right_result: break
             return True
         
+        # For parallel execution, don't evaluate left first
+        if op == "&":
+            left_coro = self._eval_infix(tokens, s, start, op_idx)
+            right_coro = self._eval_infix(tokens, s, op_idx + 1, end)
+            left_result, right_result = await asyncio.gather(left_coro, right_coro)
+            return left_result and right_result
+        
+        # For all other operators, evaluate left first
         left_result = await self._eval_infix(tokens, s, start, op_idx)
         
         if op == ">>": return await self._eval_infix(tokens, s, op_idx + 1, end)
-        if op == "&": return left_result and await self._eval_infix(tokens, s, op_idx + 1, end)
         if op == "?": return await self._eval_infix(tokens, s, op_idx + 1, end) if left_result else False
         if op == "|": return left_result or await self._eval_infix(tokens, s, op_idx + 1, end)
         return False
