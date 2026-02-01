@@ -1,42 +1,43 @@
 """TinyAgent: Zero-dependency async-first agent orchestration framework."""
 from __future__ import annotations
-import asyncio, copy, logging, re, uuid, time
-from typing import Any, Callable, Awaitable, Optional
+import asyncio, logging, re, time
+from typing import Any, Callable, Awaitable
 
 logger = logging.getLogger(__name__)
 
 class State:
-    """Thread-safe transient state container with timestamped tracing."""
-    def __init__(self, data: Optional[dict[str, Any]] = None, deep_copy: bool = False, thread_safe: bool = False):
-        self._data, self._dc, self._lock = data or {}, deep_copy, asyncio.Lock() if thread_safe else None
-        self.trace: list[tuple[float, str, Optional[dict]]] = []
-        self.session_id: str = str(uuid.uuid4())
+    """Async-safe transient state with unbounded tracing for GNN training data collection."""
+    def __init__(self, data: dict[str, Any] | None = None, async_safe: bool = False, trace_id: str | None = None):
+        self._data = data or {}
+        self._lock: asyncio.Lock | None = asyncio.Lock() if async_safe else None
+        self.trace: list[tuple[float, str, dict | None]] = []
+        self.trace_id: str = trace_id or f"{time.time():.0f}-{id(self)}"
 
     async def get(self, key: str, default: Any = None) -> Any:
         if self._lock:
-            async with self._lock: v = self._data.get(key, default)
-        else: v = self._data.get(key, default)
-        return copy.deepcopy(v) if self._dc else v
+            async with self._lock: return self._data.get(key, default)
+        return self._data.get(key, default)
 
     async def set(self, key: str, value: Any) -> None:
-        v = copy.deepcopy(value) if self._dc else value
         if self._lock:
-            async with self._lock: self._data[key] = v
-        else: self._data[key] = v
+            async with self._lock: self._data[key] = value
+        else: self._data[key] = value
 
-    def log(self, entry: str, metadata: Optional[dict[str, Any]] = None) -> None: 
+    def log(self, entry: str, metadata: dict[str, Any] | None = None) -> None:
         self.trace.append((time.time(), entry, metadata))
 
 class Node:
     """Atomic unit of work wrapping an async callable."""
     _registry: dict[str, Node] = {}
 
-    def __init__(self, name: str, fn: Callable[[State], Awaitable[bool]], timeout: Optional[float] = None, retries: int = 0):
+    def __init__(self, name: str, fn: Callable[[State], Awaitable[bool]], timeout: float | None = None, retries: int = 0):
+        if timeout is not None and timeout <= 0: raise ValueError(f"timeout must be > 0, got {timeout}")
+        if retries < 0: raise ValueError(f"retries must be >= 0, got {retries}")
         self.name, self._fn, self._timeout, self._retries = name, fn, timeout, retries
         Node._registry[name] = self
 
     async def execute(self, state: State) -> bool:
-        for _ in range(self._retries + 1):
+        for attempt in range(self._retries + 1):
             start = time.time()
             try:
                 r = await (asyncio.wait_for(self._fn(state), self._timeout) if self._timeout else self._fn(state))
@@ -45,91 +46,74 @@ class Node:
             except Exception as e: logger.exception(self.name); state.log(f"{self.name}:ERR({type(e).__name__}):{time.time()-start:.3f}s")
         return False
 
-    def __rshift__(self, other) -> Expr: 
-        other_name = other.name if isinstance(other, Node) else str(other)
-        return Expr(f"{self.name} >> {other_name}")
-    
-    def __and__(self, other) -> Expr: 
-        other_name = other.name if isinstance(other, Node) else str(other)
-        return Expr(f"{self.name} & {other_name}")
-    
-    def __or__(self, other) -> Expr: 
-        other_name = other.name if isinstance(other, Node) else str(other)
-        return Expr(f"{self.name} | {other_name}")
-    
-    def __xor__(self, other) -> Expr: 
-        other_name = other.name if isinstance(other, Node) else str(other)
-        return Expr(f"{self.name} ? {other_name}")
-
-def node(name: Optional[str] = None, timeout: Optional[float] = None, retries: int = 0):
-    """Decorator to create a Node from an async function."""
-    def decorator(fn: Callable[[State], Awaitable[bool]]) -> Node:
-        return Node(name or fn.__name__, fn, timeout, retries)
-    return decorator
-
-class Expr:
-    """Expression builder for flow DSL."""
-    def __init__(self, expr: str): self._expr = expr
-    def __rshift__(self, other) -> Expr: return Expr(f"({self._expr}) >> {other.name if isinstance(other, Node) else other._expr}")
-    def __and__(self, other) -> Expr: return Expr(f"({self._expr}) & {other.name if isinstance(other, Node) else other._expr}")
-    def __or__(self, other) -> Expr: return Expr(f"({self._expr}) | {other.name if isinstance(other, Node) else other._expr}")
-    def __xor__(self, other) -> Expr: return Expr(f"({self._expr}) ? {other.name if isinstance(other, Node) else other._expr}")
-    def loop(self, n: int, other) -> Expr: return Expr(f"({self._expr}) <{n}> {other.name if isinstance(other, Node) else other._expr}")
-    def __str__(self) -> str: return self._expr
-
 class Flow:
-    """Graph-based orchestrator parsing DSL expressions into async execution."""
-    _P, _RE = {">>": 1, "|": 2, "?": 2, "&": 3, "<": 4}, re.compile(r"(\(|\)|>>|&|\?|\||<\d+>|\w+)")
+    """Graph-based orchestrator with compiled execution plans."""
+    _P = {">>": 1, "|": 2, "?": 2, "&": 3, "<": 4}
+    _RE = re.compile(r"(\(|\)|>>|&|\?|\||<\d+>|\w+)")
+    
+    def __init__(self):
+        self._cache: dict[str, list[str]] = {}
+        self._visited: set[str] = set()
 
-    async def run(self, expr: str | Expr, state: State) -> bool:
-        tokens = self._RE.findall(str(expr))
-        return await self._eval_infix(tokens, state)
+    async def run(self, expr: str, state: State) -> bool:
+        expr_str = str(expr)
+        if expr_str not in self._cache:
+            tokens = self._RE.findall(expr_str)
+            self._validate(tokens)
+            self._cache[expr_str] = tokens
+        return await self._eval(self._cache[expr_str], state)
 
-    async def _eval_infix(self, tokens: list[str], s: State, start: int = 0, end: int = None) -> bool:
-        """Recursively evaluate infix expression with proper precedence."""
+    def _validate(self, tokens: list[str]) -> None:
+        """Validate DSL and check for missing nodes."""
+        depth, nodes = 0, set()
+        for t in tokens:
+            if t == "(": depth += 1
+            elif t == ")": depth -= 1
+            elif t not in self._P and not t.startswith("<") and t not in ("(", ")"):
+                nodes.add(t)
+                if t not in Node._registry:
+                    raise ValueError(f"Node '{t}' not found in registry. Available: {list(Node._registry.keys())}")
+            if depth < 0: raise ValueError(f"Unmatched closing parenthesis in expression")
+        if depth != 0: raise ValueError(f"Unmatched opening parenthesis in expression")
+
+    async def _eval(self, tokens: list[str], s: State, start: int = 0, end: int | None = None) -> bool:
         if end is None: end = len(tokens)
         if start >= end: return False
         
-        # Handle single token
         if end - start == 1:
             t = tokens[start]
             return await Node._registry[t].execute(s) if t in Node._registry else False
         
-        # Find lowest precedence operator (rightmost for left-to-right evaluation)
         min_prec, op_idx, depth = 999, -1, 0
         for i in range(start, end):
             if tokens[i] == "(": depth += 1
             elif tokens[i] == ")": depth -= 1
             elif depth == 0 and (tokens[i] in self._P or tokens[i].startswith("<")):
                 prec = self._P.get(tokens[i], 4) if not tokens[i].startswith("<") else 4
-                if prec <= min_prec:
-                    min_prec, op_idx = prec, i
+                if prec <= min_prec: min_prec, op_idx = prec, i
         
-        if op_idx == -1:  # Parenthesized expression
-            return await self._eval_infix(tokens, s, start + 1, end - 1)
+        if op_idx == -1: return await self._eval(tokens, s, start + 1, end - 1)
         
         op = tokens[op_idx]
         
         if op.startswith("<") and op.endswith(">"):
-            n = int(op[1:-1])
+            n, last_result = int(op[1:-1]), False
             for _ in range(n):
-                left_result = await self._eval_infix(tokens, s, start, op_idx)
-                if not left_result: break
-                right_result = await self._eval_infix(tokens, s, op_idx + 1, end)
+                left_result = await self._eval(tokens, s, start, op_idx)
+                right_result = await self._eval(tokens, s, op_idx + 1, end)
+                last_result = right_result
                 if right_result: break
-            return True
+            return last_result
         
-        # For parallel execution, don't evaluate left first
         if op == "&":
-            left_coro = self._eval_infix(tokens, s, start, op_idx)
-            right_coro = self._eval_infix(tokens, s, op_idx + 1, end)
+            left_coro = self._eval(tokens, s, start, op_idx)
+            right_coro = self._eval(tokens, s, op_idx + 1, end)
             left_result, right_result = await asyncio.gather(left_coro, right_coro)
             return left_result and right_result
         
-        # For all other operators, evaluate left first
-        left_result = await self._eval_infix(tokens, s, start, op_idx)
+        left_result = await self._eval(tokens, s, start, op_idx)
         
-        if op == ">>": return await self._eval_infix(tokens, s, op_idx + 1, end)
-        if op == "?": return await self._eval_infix(tokens, s, op_idx + 1, end) if left_result else False
-        if op == "|": return left_result or await self._eval_infix(tokens, s, op_idx + 1, end)
+        if op == ">>": return await self._eval(tokens, s, op_idx + 1, end)
+        if op == "?": return await self._eval(tokens, s, op_idx + 1, end) if left_result else False
+        if op == "|": return await self._eval(tokens, s, op_idx + 1, end) if not left_result else left_result
         return False

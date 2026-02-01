@@ -4,10 +4,9 @@ Demonstrates how to log custom data to the trace for debugging and analysis.
 """
 
 import asyncio
-from tinyagent import node, State, Flow
+from tinyagent import Node, State, Flow
 
 
-@node()
 async def fetch_user(state: State) -> bool:
     """Fetch user data and log metadata."""
     user_id = await state.get("user_id", 123)
@@ -25,7 +24,6 @@ async def fetch_user(state: State) -> bool:
     return True
 
 
-@node()
 async def process_user(state: State) -> bool:
     """Process user and log decision metadata."""
     user = await state.get("user")
@@ -43,12 +41,18 @@ async def process_user(state: State) -> bool:
     return True
 
 
+# Register nodes
+Node("fetch_user", fetch_user)
+Node("process_user", process_user)
+
+
 async def main():
     print("=== Custom Trace Logging Example ===\n")
     
-    state = State(data={"user_id": 456})
+    state = State(data={"user_id": 456}, trace_id="custom-trace-demo")
     
-    await Flow().run("fetch_user >> process_user", state)
+    flow = Flow()
+    await flow.run("fetch_user >> process_user", state)
     
     print(f"Decision: {await state.get('decision')}\n")
     

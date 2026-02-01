@@ -1,25 +1,20 @@
 """TinyAgent Quick Start Example
 
-This example demonstrates the core features of TinyAgent:
-- Creating nodes with the @node decorator
-- Using operator-based flow definition
-- Timestamped tracing
+Demonstrates the core features of TinyAgent v0.2.0.
 """
 
 import asyncio
-from tinyagent import node, State, Flow
+from tinyagent import Node, State, Flow
 
 
-@node()
 async def fetch_data(state: State) -> bool:
     """Simulate fetching data from an API."""
     print("📥 Fetching data...")
-    await asyncio.sleep(0.1)  # Simulate network delay
+    await asyncio.sleep(0.1)
     await state.set("data", {"temperature": 72, "humidity": 65})
     return True
 
 
-@node()
 async def validate_data(state: State) -> bool:
     """Validate the fetched data."""
     print("✓ Validating data...")
@@ -30,12 +25,10 @@ async def validate_data(state: State) -> bool:
     return is_valid
 
 
-@node()
 async def process_data(state: State) -> bool:
     """Process the validated data."""
     print("⚙️  Processing data...")
     data = await state.get("data")
-    # Convert to Celsius
     celsius = (data["temperature"] - 32) * 5/9
     await state.set("result", {
         "temp_celsius": round(celsius, 1),
@@ -44,7 +37,6 @@ async def process_data(state: State) -> bool:
     return True
 
 
-@node()
 async def handle_error(state: State) -> bool:
     """Handle validation errors."""
     print("❌ Data validation failed!")
@@ -52,19 +44,26 @@ async def handle_error(state: State) -> bool:
     return True
 
 
+# Register nodes
+fetch = Node("fetch_data", fetch_data)
+validate = Node("validate_data", validate_data)
+process = Node("process_data", process_data)
+error_handler = Node("handle_error", handle_error)
+
+
 async def main():
     print("=== TinyAgent Quick Start ===\n")
     
-    # Create state
-    state = State()
+    # Create state with custom trace_id
+    state = State(trace_id="quickstart-demo")
     
-    # Define flow using string DSL (simpler for complex expressions)
-    # Translation: fetch, then validate, if success process, else handle_error
+    # Define flow using string DSL
     flow_expr = "fetch_data >> (validate_data ? process_data | handle_error)"
     
     # Run the flow
     print(f"Running flow: {flow_expr}\n")
-    success = await Flow().run(flow_expr, state)
+    flow = Flow()
+    success = await flow.run(flow_expr, state)
     
     # Display results
     print(f"\n✓ Flow completed: {success}")
@@ -72,10 +71,10 @@ async def main():
     print(f"Result: {result}")
     
     # Show trace with timestamps
-    print(f"\n📊 Execution Trace (Session: {state.session_id[:8]}):")
+    print(f"\n📊 Execution Trace (ID: {state.trace_id}):")
     start_time = state.trace[0][0] if state.trace else 0
     for timestamp, event, metadata in state.trace:
-        elapsed = (timestamp - start_time) * 1000  # Convert to ms
+        elapsed = (timestamp - start_time) * 1000
         print(f"  +{elapsed:6.1f}ms - {event}")
         if metadata:
             print(f"    Metadata: {metadata}")

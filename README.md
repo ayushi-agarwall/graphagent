@@ -1,6 +1,6 @@
 # GraphAgent
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/ayushi-agarwall/tinyagent/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/ayushi-agarwall/tinyagent/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Size](https://img.shields.io/badge/code%20size-6.4%20KB-green.svg)](./src/tinyagent/core.py)
@@ -20,15 +20,19 @@ GraphAgent is a minimal, production-ready framework for building AI agents and c
 | CrewAI | ~8,000+ | 30+ | CrewAI platform |
 | Pydantic AI | ~5,000+ | 15+ | Pydantic ecosystem |
 | AutoGen | ~20,000+ | 40+ | Microsoft Azure |
-| GraphAgent | ~100 | 0 | None |
+| GraphAgent | ~120 | 0 | None |
 
-## Design Philosophy
+## Key Features
 
 - **Zero bloat**: No unnecessary abstractions
 - **Zero dependencies**: Python standard library only
 - **Zero vendor lock-in**: Integrate with any LLM, tool, or service
-- **Rapid prototyping**: Build agents in minutes
-- **Production extensible**: Scale without rewriting
+- **Native Context Graphs**: Agent state transitions form a traversable graph, providing structured data for advanced debugging and future GNN-based optimization
+- **True Parallel Execution**: Uses `asyncio.gather()` for concurrent node execution
+- **Expression Caching**: Parses DSL once, reuses compiled execution plan
+- **Bounded Tracing**: Automatic memory management with configurable trace limits
+- **Input Validation**: Catches errors before execution (missing nodes, invalid syntax, circular flows)
+- **Production Ready**: Async-safe state, proper error handling, timeout/retry support
 
 ## Core Concepts
 
@@ -44,16 +48,16 @@ GraphAgent is built on three primitives:
 
 ```
 >>    Sequential: Run A then B
-&     Parallel: Run A and B concurrently
+&     Parallel: Run A and B concurrently (true parallelism via asyncio.gather)
 ?     Conditional Success: Run B only if A succeeds
 |     Conditional Failure: Run B only if A fails
-<N>   Loop: Alternate between A and B up to N times
+<N>   Loop: Alternate between A and B up to N times, return last result
 ()    Grouping: Isolate precedence
 ```
 
 ## Installation
 
-### Option 1: Install from Source (Recommended for now)
+### Option 1: Install from Source
 
 ```bash
 git clone https://github.com/ayushi-agarwall/tinyagent.git
@@ -62,8 +66,6 @@ pip install -e .
 ```
 
 ### Option 2: Copy-Paste (Zero Install)
-
-Just copy [`src/tinyagent/core.py`](./src/tinyagent/core.py) into your project:
 
 ```bash
 curl -O https://raw.githubusercontent.com/ayushi-agarwall/tinyagent/main/src/tinyagent/core.py
@@ -79,108 +81,85 @@ pip install tinyagent
 
 ```python
 import asyncio
-from tinyagent import node, State, Flow
+from tinyagent import Node, State, Flow
 
-@node()
-async def fetch(state: State) -> bool:
+# Define nodes directly (no decorator needed)
+async def fetch_data(state: State) -> bool:
     await state.set("data", {"value": 42})
     return True
 
-@node()
-async def process(state: State) -> bool:
+async def process_data(state: State) -> bool:
     data = await state.get("data")
     await state.set("result", data["value"] * 2)
     return True
 
+# Register nodes
+fetch = Node("fetch", fetch_data)
+process = Node("process", process_data)
+
 async def main():
-    state = State()
+    # Create state with trace_id for tracking
+    state = State(trace_id="my-workflow-001")
     
-    # Option 1: Operator-based flow definition
-    await Flow().run(fetch >> process, state)
-    
-    # Option 2: String DSL
-    await Flow().run("fetch >> process", state)
+    # Run flow
+    flow = Flow()
+    await flow.run("fetch >> process", state)
     
     print(await state.get("result"))  # 84
-    print(state.trace)  # [(1706745600.123, 'fetch:OK'), (1706745600.456, 'process:OK')]
+    print(state.trace)  # [(timestamp, 'fetch:OK:0.001s', None), ...]
 
 asyncio.run(main())
 ```
 
 ## Supported Architectures
 
-GraphAgent provides Turing-complete orchestration. The following patterns are natively supported through edge operators:
+TinyAgent's graph-based execution model natively supports:
 
 ### Multi-Agent Systems
-Parallel execution with fan-out and fan-in. Multiple specialized agents work concurrently on subtasks, with results aggregated by a coordinator.
+Parallel execution with fan-out and fan-in. Multiple specialized agents work concurrently on subtasks.
 
 ### Workflow Automation
-Sequential pipelines with conditional branching. Tasks execute in order with success/failure routing to handle edge cases.
+Sequential pipelines with conditional branching. Tasks execute in order with success/failure routing.
 
 ### RAG Pipelines
-Retrieval-augmented generation through sequential node composition: embedding, retrieval, reranking, and generation stages.
+Retrieval-augmented generation through sequential composition: embedding, retrieval, reranking, generation.
 
 ### Graph of Thoughts (GoT)
-Parallel reasoning branches that explore multiple solution paths simultaneously, then aggregate insights.
+Parallel reasoning branches that explore multiple solution paths simultaneously.
 
 ### Mixture of Experts (MoE)
-Router nodes that dispatch to specialized expert nodes running in parallel, with a combiner for final output.
+Router nodes dispatch to specialized expert nodes running in parallel, with a combiner for final output.
 
 ### Self-Correction Loop (Reflexion)
-Bidirectional loops using the `<N>` operator. A generator produces output, a validator checks it, and the loop continues until success or max iterations.
+Bidirectional loops using `<N>`. Generator produces output, validator checks it, loop continues until success or max iterations.
+
+```python
+# Example: Self-correction with max 3 attempts
+await flow.run("generator <3> validator", state)
+```
 
 ### Hierarchical Multi-Agent
 Nested flows where orchestrator nodes invoke sub-flows, enabling tree-structured agent hierarchies.
 
-### Consensus Mechanisms
-Parallel agents with voting aggregation for ensemble decision-making.
+## Native Context Graphs
 
-## Inherent Tracing
+TinyAgent treats agent state transitions as a traversable graph. Each trace entry captures:
+- **Timestamp**: When the node executed
+- **Event**: Node name, status (OK/TIMEOUT/ERR), duration
+- **Metadata**: Optional custom data
 
-Every request generates a timestamped trace log with execution duration automatically. Timestamps and durations enable temporal modeling and performance analysis.
-
-```python
-state = State()
-await Flow().run("A >> B ? C | D", state)
-print(state.trace)
-# [
-#   (1706745600.001, 'A:OK:0.150s', None),
-#   (1706745600.151, 'B:ERR(ValueError):0.023s', None),
-#   (1706745600.174, 'D:OK:0.005s', None)
-# ]
-```
-
-Trace format: `(timestamp, "{NodeName}:{Status}:{Duration}", metadata)`
-
-**Status values:**
-- `OK` - Successful execution
-- `TIMEOUT` - Execution exceeded timeout
-- `ERR({ExceptionType})` - Exception occurred
-
-**Duration** - Time in seconds (3 decimal precision) the node took to execute
-
-### Custom Trace Logging
-
-Users can log custom data with metadata for debugging and analysis:
+This structured format provides:
+1. **Advanced Debugging**: Visualize execution paths, identify bottlenecks
+2. **Performance Analysis**: Track node durations, detect anomalies
+3. **GNN Training Data**: Trace graphs can train Graph Neural Networks for self-optimizing flows
 
 ```python
-@node()
-async def my_agent(state: State) -> bool:
-    # Your logic here
-    result = {"score": 0.95, "category": "approved"}
-    
-    # Log custom event with metadata
-    state.log("my_agent:decision", {
-        "score": result["score"],
-        "category": result["category"],
-        "confidence": 0.95
-    })
-    
-    return True
+state = State(trace_id="workflow-123", max_trace=1000)
+await flow.run("A >> (B & C) >> D", state)
 
-# Trace will include:
-# (timestamp, 'my_agent:decision', {'score': 0.95, 'category': 'approved', 'confidence': 0.95})
-# (timestamp, 'my_agent:OK:0.023s', None)
+# Trace forms a graph: A -> B, A -> C, B -> D, C -> D
+for timestamp, event, metadata in state.trace:
+    print(f"{timestamp}: {event}")
 ```
 
 ## API Reference
@@ -189,42 +168,35 @@ async def my_agent(state: State) -> bool:
 
 ```python
 State(
-    data: dict = None,       # Initial state data
-    deep_copy: bool = False, # Enable deep copying on get/set
-    thread_safe: bool = False # Enable async lock
+    data: dict[str, Any] | None = None,  # Initial state data
+    async_safe: bool = False,             # Enable async lock for concurrent access
+    trace_id: str | None = None,          # Custom trace identifier
+    max_trace: int = 1000                 # Maximum trace entries (bounded deque)
 )
 ```
 
-Methods:
+**Methods:**
 - `await state.get(key, default=None)` - Retrieve value
 - `await state.set(key, value)` - Store value
-- `state.log(entry, metadata=None)` - Add custom trace entry with optional metadata dict
-- `state.trace` - List of (timestamp, event, metadata) tuples
-- `state.session_id` - Unique session identifier
+- `state.log(entry, metadata=None)` - Add custom trace entry
+- `state.trace` - Deque of (timestamp, event, metadata) tuples
+- `state.trace_id` - Unique trace identifier
 
 ### Node
 
 ```python
-# Via decorator
-@node(name="optional_name", timeout=30.0, retries=3)
-async def my_node(state: State) -> bool:
-    ...
-
-# Via constructor
 Node(
-    name: str,
-    fn: Callable[[State], Awaitable[bool]],
-    timeout: float = None,
-    retries: int = 0
+    name: str,                                    # Unique node identifier
+    fn: Callable[[State], Awaitable[bool]],      # Async function
+    timeout: float | None = None,                # Execution timeout (must be > 0)
+    retries: int = 0                             # Retry count (must be >= 0)
 )
 ```
 
-Nodes support operator chaining:
-```python
-flow_expr = fetch >> process >> output
-flow_expr = step_a & step_b  # parallel
-flow_expr = validate ^ fallback  # conditional
-```
+**Validation:**
+- Raises `ValueError` if timeout <= 0
+- Raises `ValueError` if retries < 0
+- Auto-registers in global registry
 
 ### Flow
 
@@ -232,52 +204,90 @@ flow_expr = validate ^ fallback  # conditional
 Flow()
 ```
 
-Methods:
-- `await flow.run(expr, state)` - Execute DSL expression (string or Expr object)
+**Methods:**
+- `await flow.run(expr: str, state: State) -> bool` - Execute DSL expression
+
+**Features:**
+- Expression caching: Parses once, reuses compiled plan
+- Validation: Checks for missing nodes, unmatched parentheses
+- Error handling: Clear error messages with available nodes listed
 
 ## Loop Operator
 
 The `<N>` operator alternates execution between two nodes:
 
 ```python
-# generator produces, reviewer validates, loops up to 3 times
 await flow.run("generator <3> reviewer", state)
 ```
 
-Execution:
+**Execution:**
 1. Run generator
 2. Run reviewer
-3. If reviewer returns False, repeat (up to N times)
-4. Exit on reviewer success or max iterations
+3. If reviewer returns `True`, exit (success)
+4. Otherwise, repeat up to N times
+5. Return last reviewer result
 
-## Extensibility
+**Use Case:** Self-correction loops where generator produces output and reviewer validates it.
 
-GraphAgent integrates with external libraries without lock-in:
+## Parallel Execution
+
+The `&` operator uses `asyncio.gather()` for true parallelism:
 
 ```python
-from tinyagent import node, State
+import time
 
-# With any LLM client
-@node()
-async def llm_node(state: State) -> bool:
-    response = await openai_client.chat(await state.get("prompt"))
-    await state.set("response", response)
+async def api_call_1(state: State) -> bool:
+    await asyncio.sleep(0.3)
     return True
 
-# With any HTTP client
-@node()
-async def api_node(state: State) -> bool:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(await state.get("url")) as resp:
-            await state.set("data", await resp.json())
+async def api_call_2(state: State) -> bool:
+    await asyncio.sleep(0.3)
     return True
+
+Node("api1", api_call_1)
+Node("api2", api_call_2)
+
+start = time.time()
+await Flow().run("api1 & api2", state)
+elapsed = time.time() - start
+
+# elapsed ≈ 0.3s (parallel), not 0.6s (sequential)
+```
+
+## Conditional Operators
+
+**`?` (Conditional Success):**
+```python
+await flow.run("validate ? process", state)
+# Runs process ONLY if validate returns True
+```
+
+**`|` (Conditional Failure):**
+```python
+await flow.run("risky_task | fallback", state)
+# Runs fallback ONLY if risky_task returns False
+# Returns risky_task result if it succeeds
+```
+
+## Error Handling
+
+```python
+try:
+    await flow.run("nonexistent_node", state)
+except ValueError as e:
+    print(e)  # "Node 'nonexistent_node' not found in registry. Available: [...]"
+
+try:
+    await flow.run("((unmatched", state)
+except ValueError as e:
+    print(e)  # "Unmatched opening parenthesis in expression"
 ```
 
 ## Future Roadmap
 
 ### GNN-Powered Self-Optimization
 
-GraphAgent trace logs are architected as timestamped graph data specifically designed to serve as training data for Graph Neural Networks (GNNs/GCNs) and temporal graph models. This enables:
+TinyAgent trace logs are architected as timestamped graph data specifically designed to serve as training data for Graph Neural Networks (GNNs/GCNs). This enables:
 
 1. **Execution Pattern Learning**: GNNs learn optimal execution paths from historical traces
 2. **Temporal Modeling**: Timestamps enable State Space Models on temporal graphs
@@ -285,13 +295,14 @@ GraphAgent trace logs are architected as timestamped graph data specifically des
 4. **Anomaly Detection**: Identification of suboptimal or failing flow patterns
 5. **Self-Healing Flows**: Automatic rerouting around predicted failure points
 
-The trace format `[(t1, "A:OK"), (t2, "B:ERR"), (t3, "C:OK")]` directly maps to temporal graph representations suitable for GNN/SSM training.
+The native context graph structure (trace as adjacency list) directly maps to GNN input format.
 
 ### Planned Features
 
+- Workflow visualization (Mermaid diagrams from trace)
+- OpenTelemetry integration
 - Pub/sub event system
-- Workflow validation (cycle detection)
-- Mermaid diagram visualization
+- Global agent registry
 
 ## License
 
