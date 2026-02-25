@@ -90,7 +90,6 @@ class Flow:
             return lr and rr, self._m(ln, rn)
         lr, ln = await self._eval(t, s, i, k, p)
         if op == ">>":
-            if not lr: return False, ln
             rr, rn = await self._eval(t, s, k + 1, j, self._m(p, ln)); return rr, self._m(ln, rn)
         if op == "?":
             if not lr: return False, ln
